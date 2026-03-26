@@ -41,10 +41,10 @@ This project predicts the **Air Quality Index (AQI) status** (Good, Satisfactory
 
 | Model | AUC Score |
 |-------|-----------|
-| Random Forest | 1.0000 🏆 |
-| Decision Tree | 0.9996 |
-| KNN | 0.9952 |
-| Naive Bayes | 0.9442 |
+| Random Forest | 0.9924 🏆 |
+| Decision Tree | 0.9073 |
+| KNN | 0.9630 |
+| Naive Bayes | 0.9328 |
 
 ---
 
