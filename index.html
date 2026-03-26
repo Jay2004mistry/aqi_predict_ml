@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AQI Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #f5f4f0;
+    --surface: #ffffff;
+    --border:  #e0ddd6;
+    --text:    #1a1a18;
+    --muted:   #888880;
+    --accent:  #1a1a18;
+    --good:    #2d7a4f;
+    --sat:     #4a9e6b;
+    --mod:     #d4820a;
+    --poor:    #c45c1a;
+    --vpoor:   #b83232;
+    --severe:  #7c1fa0;
+  }
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3rem 1rem 4rem;
+  }
+  header { text-align: center; margin-bottom: 2.5rem; }
+  header h1 { font-size: 1.5rem; font-weight: 500; letter-spacing: -0.02em; margin-bottom: 0.3rem; }
+  header p  { font-size: 0.85rem; color: var(--muted); font-weight: 300; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .section { margin-bottom: 1.6rem; }
+  .section-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .row   { display: grid; gap: 0.75rem; margin-bottom: 0.75rem; }
+  .row-2 { grid-template-columns: 1fr 1fr; }
+  .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .row-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  @media(max-width: 480px) {
+    .row-3, .row-4 { grid-template-columns: 1fr 1fr; }
+    .row-2 { grid-template-columns: 1fr; }
+  }
+
+  .field { display: flex; flex-direction: column; gap: 0.3rem; }
+  label  { font-size: 0.72rem; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
+
+  input, select {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.88rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  input:focus, select:focus { border-color: var(--accent); background: #fff; }
+  input::placeholder { color: #bbb; }
+  input[readonly] { color: var(--muted); background: #f9f9f7; cursor: not-allowed; }
+  select option { background: #fff; }
+
+  /* Fetch button */
+  .fetch-row { display: flex; gap: 0.6rem; align-items: flex-end; margin-bottom: 0.75rem; }
+  .fetch-row .field { flex: 1; }
+  .fetch-btn {
+    padding: 0.55rem 1rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .fetch-btn:hover { opacity: 0.85; }
+  .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Live badge */
+  .live-badge {
+    display: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    background: #e8f5ee;
+    color: var(--good);
+    border: 1px solid #c3e6d0;
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+  }
+  .live-badge.show { display: inline; }
+
+  /* Main button */
+  .btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .spin {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error {
+    font-size: 0.82rem;
+    color: #c0392b;
+    background: #fdf0ee;
+    border: 1px solid #f5c6c2;
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    margin-top: 0.75rem;
+    display: none;
+  }
+  .error.show { display: block; }
+
+  /* Result */
+  .result {
+    margin-top: 1.2rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result-header {
+    padding: 1rem 1.2rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .result-status { font-size: 1.3rem; font-weight: 500; letter-spacing: -0.02em; }
+  .result-conf   { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--muted); }
+  .result-body   { padding: 0.9rem 1.2rem; }
+  .bar-label {
+    font-size: 0.7rem; color: var(--muted); margin-bottom: 0.35rem;
+    font-family: 'IBM Plex Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .bar-track { background: var(--border); border-radius: 100px; height: 4px; overflow: hidden; margin-bottom: 1rem; }
+  .bar-fill  { height: 100%; border-radius: 100px; width: 0%; transition: width 0.7s ease; }
+  .advice {
+    font-size: 0.82rem; color: var(--muted); line-height: 1.6;
+    padding-top: 0.5rem; border-top: 1px solid var(--border);
+  }
+  .advice strong {
+    display: block; font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.08em; font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 0.3rem; color: var(--text);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AQI Predictor — India</h1>
+  <p>Select city to fetch live pollutant data and predict air quality</p>
+</header>
+
+<div class="card">
+
+  <!-- City selector -->
+  <div class="section">
+    <div class="section-title">City <span class="live-badge" id="live-badge">LIVE DATA</span></div>
+    <div class="fetch-row">
+      <div class="field">
+        <label>Select City</label>
+        <select id="city-select">
+          <option value="">Choose a city...</option>
+          <optgroup label="Gujarat">
+            <option value="Ahmedabad|Gujarat|Ahmedabad">Ahmedabad</option>
+            <option value="Surat|Gujarat|Surat">Surat</option>
+            <option value="Vadodara|Gujarat|Vadodara">Vadodara</option>
+            <option value="Rajkot|Gujarat|Rajkot">Rajkot</option>
+          </optgroup>
+          <optgroup label="Maharashtra">
+            <option value="Mumbai|Maharashtra|Mumbai">Mumbai</option>
+            <option value="Pune|Maharashtra|Pune">Pune</option>
+            <option value="Nagpur|Maharashtra|Nagpur">Nagpur</option>
+          </optgroup>
+          <optgroup label="North India">
+            <option value="Delhi|Delhi|Delhi">Delhi</option>
+            <option value="Lucknow|Uttar Pradesh|Lucknow">Lucknow</option>
+            <option value="Kanpur|Uttar Pradesh|Kanpur">Kanpur</option>
+            <option value="Agra|Uttar Pradesh|Agra">Agra</option>
+            <option value="Jaipur|Rajasthan|Jaipur">Jaipur</option>
+            <option value="Chandigarh|Chandigarh|Chandigarh">Chandigarh</option>
+          </optgroup>
+          <optgroup label="South India">
+            <option value="Bangalore|Karnataka|Bangalore">Bangalore</option>
+            <option value="Chennai|Tamil Nadu|Chennai">Chennai</option>
+            <option value="Hyderabad|Telangana|Hyderabad">Hyderabad</option>
+            <option value="Kochi|Kerala|Kochi">Kochi</option>
+          </optgroup>
+          <optgroup label="East India">
+            <option value="Kolkata|West Bengal|Kolkata">Kolkata</option>
+            <option value="Patna|Bihar|Patna">Patna</option>
+            <option value="Bhubaneswar|Odisha|Bhubaneswar">Bhubaneswar</option>
+          </optgroup>
+        </select>
+      </div>
+      <button class="fetch-btn" id="fetch-btn" onclick="fetchLiveData()">
+        <span id="fetch-spin" class="spin" style="border-top-color:#fff;border-color:rgba(255,255,255,0.3)"></span>
+        <span id="fetch-text">Fetch Data</span>
+      </button>
+    </div>
+
+    <div class="row row-2">
+      <div class="field">
+        <label>State</label>
+        <input type="text" id="state" readonly placeholder="Auto-filled"/>
+      </div>
+      <div class="field">
+        <label>Area Type</label>
+        <select id="type">
+          <option value="Residential, Rural and other Areas">Residential / Rural</option>
+          <option value="Industrial Area">Industrial Area</option>
+          <option value="Sensitive Area">Sensitive Area</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pollutants (auto filled) -->
+  <div class="section">
+    <div class="section-title">Pollutant Readings (µg/m³) — auto filled from live data</div>
+    <div class="row row-4">
+      <div class="field">
+        <label>SO₂</label>
+        <input type="number" id="so2" placeholder="—" step="0.1"/>
+      </div>
+      <div class="field">
+        <label>NO₂</label>
+        <input type="number" id="no2" placeholder="—" step="0.1"/>
+      </div>
+      <div class="field">
+        <label>RSPM</label>
+        <input type="number" id="rspm" placeholder="—" step="0.1"/>
+      </div>
+      <div class="field">
+        <label>SPM</label>
+        <input type="number" id="spm" placeholder="—" step="0.1"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Time (auto filled) -->
+  <div class="section">
+    <div class="section-title">Time — auto filled</div>
+    <div class="row row-3">
+      <div class="field">
+        <label>Year</label>
+        <input type="number" id="year" placeholder="—" readonly/>
+      </div>
+      <div class="field">
+        <label>Month</label>
+        <input type="number" id="month" placeholder="—" readonly/>
+      </div>
+      <div class="field">
+        <label>Season</label>
+        <input type="text" id="season" placeholder="—" readonly/>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn" id="btn" onclick="predict()">
+    <span class="spin" id="spin"></span>
+    <span id="btn-text">Predict Air Quality</span>
+  </button>
+
+  <div class="error" id="error"></div>
+
+  <div class="result" id="result">
+    <div class="result-header">
+      <div class="result-status" id="r-status">—</div>
+      <div class="result-conf"   id="r-conf">—</div>
+    </div>
+    <div class="result-body">
+      <div class="bar-label">Confidence</div>
+      <div class="bar-track">
+        <div class="bar-fill" id="r-bar"></div>
+      </div>
+      <div class="advice">
+        <strong>Health Advice</strong>
+        <span id="r-advice"></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // 🔁 Replace with your actual URLs
+  const API_URL  = "http://127.0.0.1:8000/predict";  // your FastAPI
+  const WAQI_TOKEN = "ae120902b904c16ebe5650bf57956b92714a6be3";               // your WAQI token
+
+  const STATUS_COLORS = {
+    "Good":         "#2d7a4f",
+    "Satisfactory": "#4a9e6b",
+    "Moderate":     "#d4820a",
+    "Poor":         "#c45c1a",
+    "Very Poor":    "#b83232",
+    "Severe":       "#7c1fa0"
+  };
+
+  const ADVICE = {
+    "Good":         "Air quality is good. Safe for all outdoor activities.",
+    "Satisfactory": "Air quality is acceptable. Sensitive individuals should limit prolonged outdoor exertion.",
+    "Moderate":     "Moderate health concern. People with respiratory issues should reduce outdoor activity.",
+    "Poor":         "Everyone may experience health effects. Avoid prolonged outdoor activity.",
+    "Very Poor":    "Health alert — everyone should avoid outdoor exertion. Keep windows closed.",
+    "Severe":       "Emergency conditions. Stay indoors. Avoid all outdoor activity. Use air purifier if possible."
+  };
+
+  function getSeason(month) {
+    if ([12,1,2].includes(month))    return "Winter";
+    if ([3,4,5].includes(month))     return "Summer";
+    if ([6,7,8,9].includes(month))   return "Monsoon";
+    return "Post-Monsoon";
+  }
+
+  async function fetchLiveData() {
+    const select   = document.getElementById("city-select");
+    const fetchBtn = document.getElementById("fetch-btn");
+    const fetchSpin= document.getElementById("fetch-spin");
+    const fetchText= document.getElementById("fetch-text");
+    const errorEl  = document.getElementById("error");
+
+    const val = select.value;
+    if (!val) {
+      errorEl.textContent = "Please select a city first.";
+      errorEl.classList.add("show");
+      return;
+    }
+
+    errorEl.classList.remove("show");
+    fetchBtn.disabled = true;
+    fetchSpin.style.display = "block";
+    fetchText.textContent = "Fetching...";
+
+    const [cityName, state, location] = val.split("|");
+
+    try {
+      const res  = await fetch(`https://api.waqi.info/feed/${cityName}/?token=${WAQI_TOKEN}`);
+      const data = await res.json();
+
+      if (data.status !== "ok") throw new Error("City data not available");
+
+      const iaqi = data.data.iaqi;
+
+      // fill pollutants — use available values, fallback to mean if missing
+      document.getElementById("so2").value  = iaqi.so2  ? iaqi.so2.v.toFixed(1)  : 10.0;
+      document.getElementById("no2").value  = iaqi.no2  ? iaqi.no2.v.toFixed(1)  : 20.0;
+      document.getElementById("rspm").value = iaqi.pm10 ? iaqi.pm10.v.toFixed(1) : 60.0;
+      document.getElementById("spm").value  = iaqi.pm25 ? iaqi.pm25.v.toFixed(1) : 80.0;
+
+      // fill time
+      const now = new Date();
+      document.getElementById("year").value   = now.getFullYear();
+      document.getElementById("month").value  = now.getMonth() + 1;
+      document.getElementById("season").value = getSeason(now.getMonth() + 1);
+
+      // fill location
+      document.getElementById("state").value = state;
+
+      // store for predict
+      document.getElementById("city-select").dataset.location = location;
+
+      // show live badge
+      document.getElementById("live-badge").classList.add("show");
+
+    } catch (err) {
+      errorEl.textContent = "Could not fetch live data for this city. Try another city or enter values manually.";
+      errorEl.classList.add("show");
+    } finally {
+      fetchBtn.disabled = false;
+      fetchSpin.style.display = "none";
+      fetchText.textContent = "Fetch Data";
+    }
+  }
+
+  async function predict() {
+    const btn     = document.getElementById("btn");
+    const spin    = document.getElementById("spin");
+    const btnText = document.getElementById("btn-text");
+    const errorEl = document.getElementById("error");
+    const resultEl= document.getElementById("result");
+
+    const state    = document.getElementById("state").value.trim();
+    const location = document.getElementById("city-select").dataset.location || "";
+    const type     = document.getElementById("type").value;
+    const so2      = parseFloat(document.getElementById("so2").value);
+    const no2      = parseFloat(document.getElementById("no2").value);
+    const rspm     = parseFloat(document.getElementById("rspm").value);
+    const spm      = parseFloat(document.getElementById("spm").value);
+    const year     = parseInt(document.getElementById("year").value);
+    const month    = parseInt(document.getElementById("month").value);
+    const season   = document.getElementById("season").value;
+
+    if (!state || !location || !type || isNaN(so2) || isNaN(no2) ||
+        isNaN(rspm) || isNaN(spm) || isNaN(year) || isNaN(month) || !season) {
+      errorEl.textContent = "Please fetch live data first by selecting a city.";
+      errorEl.classList.add("show");
+      return;
+    }
+
+    errorEl.classList.remove("show");
+    resultEl.classList.remove("show");
+    btn.disabled = true;
+    spin.style.display = "block";
+    btnText.textContent = "Predicting...";
+
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state, location, type, so2, no2, rspm, spm, year, month, season })
+      });
+
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+
+      if (data.error) {
+        errorEl.textContent = data.error;
+        errorEl.classList.add("show");
+        return;
+      }
+
+      const status = data.predicted_aqi_category;
+      const conf   = data.confidence;
+      const color  = STATUS_COLORS[status] || "#333";
+
+      document.getElementById("r-status").textContent  = status;
+      document.getElementById("r-status").style.color  = color;
+      document.getElementById("r-conf").textContent    = `${conf}% confidence`;
+      document.getElementById("r-bar").style.background= color;
+      document.getElementById("r-bar").style.width     = "0%";
+      document.getElementById("r-advice").textContent  = ADVICE[status] || "";
+
+      setTimeout(() => {
+        document.getElementById("r-bar").style.width = conf + "%";
+      }, 50);
+
+      resultEl.classList.add("show");
+
+    } catch (err) {
+      errorEl.textContent = "Could not connect to prediction API. Make sure it is running.";
+      errorEl.classList.add("show");
+    } finally {
+      btn.disabled = false;
+      spin.style.display = "none";
+      btnText.textContent = "Predict Air Quality";
+    }
+  }
+</script>
+</body>
+</html>
