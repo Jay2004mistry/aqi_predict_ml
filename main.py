@@ -55,6 +55,7 @@ class AQIRequest(BaseModel):
 #define the predict endpoint which takes the input data in the form of AQIRequest and returns the predicted AQI category and confidence score
 def predict_aqi(request:AQIRequest):
     try:
+        #request data from user input and convert it into a dataframe to make prediction using the model
         input_data = pd.DataFrame([{
             #convert state, location, type to number using label encoder
             'state':    le_state.transform([request.state])[0],
